@@ -178,22 +178,21 @@ func TestResolveTemplate_MissingKeyStaysLiteral(t *testing.T) {
 
 // --- RAG 节点（stub 行为锁定） ---
 
-func TestRAGNode_StubOutputContainsConfig(t *testing.T) {
+// RAG 已接入真实召回（pgvector + 嵌入端点 + LLM 重排）；
+// 测试环境未配置依赖时必须给出指向 docker-compose 的可读错误
+func TestRAGNode_UnconfiguredReportsReadableError(t *testing.T) {
+	t.Setenv("PG_DSN", "")
 	node := &DAGNode{ID: "r", Type: NodeTypeRAG, Data: NodeData{
 		"knowledgeBaseId": "kb-1",
-		"topK":            20,
-		"rerankTopK":      5,
 		"query":           "什么是 {{__last__}}",
 	}}
 	send, _ := collect()
-	got, err := executeRAGNode(context.Background(), node, ExecutionContext{"__last__": "DAG"}, send)
-	if err != nil {
-		t.Fatal(err)
+	_, err := executeRAGNode(context.Background(), node, ExecutionContext{"__last__": "DAG"}, send)
+	if err == nil {
+		t.Fatal("unconfigured RAG must error, not stub")
 	}
-	for _, want := range []string{"kb-1", "RAG stub", "什么是 DAG"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("stub output missing %q: %s", want, got)
-		}
+	if !strings.Contains(err.Error(), "PG_DSN") {
+		t.Errorf("error should point at PG_DSN config, got: %v", err)
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 
 	openai "github.com/sashabaranov/go-openai"
 
+	"github.com/lanse/dsh-plugin-agent-canvas/rag"
 	"github.com/lanse/dsh-plugin-agent-canvas/tools"
 )
 
@@ -388,7 +389,9 @@ func executeConditionNode(ctx context.Context, node *DAGNode, execCtx ExecutionC
 	return "false", nil
 }
 
-// executeRAGNode 是占位实现：生产化路径为 pgvector 向量召回 + 重排模型两阶段检索。
+// executeRAGNode 执行召回-重排两阶段检索：pgvector 余弦召回 topK，
+// DeepSeek listwise 重排取 rerankTopK。依赖 backend/.env 配置
+// （PG_DSN + EMBEDDING_*，见 backend/docker-compose.yml），未配置时报可读错误。
 func executeRAGNode(ctx context.Context, node *DAGNode, execCtx ExecutionContext, send SendFunc) (string, error) {
 	kb := getString(node.Data, "knowledgeBaseId", "")
 	if kb == "" {
@@ -401,11 +404,20 @@ func executeRAGNode(ctx context.Context, node *DAGNode, execCtx ExecutionContext
 	if query == "" {
 		query = execCtx["__last__"]
 	}
+	if query == "" {
+		query = execCtx["__input__"]
+	}
 
-	return fmt.Sprintf(
-		"[RAG stub] knowledgeBase=%s topK=%d rerankTopK=%d query=%q — 召回与重排待接入 pgvector（当前返回占位结果）",
-		kb, topK, rerankTopK, query,
-	), nil
+	result, err := rag.Query(ctx, rag.QueryInput{
+		KB:         kb,
+		Query:      query,
+		TopK:       topK,
+		RerankTopK: rerankTopK,
+	})
+	if err != nil {
+		return "", fmt.Errorf("RAG 节点 %q: %w", node.ID, err)
+	}
+	return result, nil
 }
 
 // resolveTemplateDeep 对嵌套的 map / slice / string 递归做 {{nodeId}} 模板替换，

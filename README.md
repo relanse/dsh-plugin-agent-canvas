@@ -13,7 +13,8 @@
 - **toolview 调用上下文** —— 面板消费 DSH 注入的 `ToolCallOwnerProps`：AI 调用 `run_workflow` 提交的节点图自动水合进画布（分层自动布局 + fitView），调用状态与输出展示在信息条
 - **画布编辑持久化** —— 每张调用卡按 `callId` 独立存储（localStorage 防抖写入），刷新后用户编辑优先于调用参数重新水合
 - **双层循环防护** —— 静态环检测 + 运行时 `maxSteps` 工具调用上限，逼近上限前 3 步发出 `step_limit_warning`
-- **统一工具注册表** —— 工具以 JSON Schema 注册一次，`GET /api/tools` 同时供 LLM Function Calling 与前端节点面板消费
+- **统一工具注册表** —— 工具以 JSON Schema 注册一次，`GET /api/tools` 同时供 LLM Function Calling 与前端节点面板消费；`web_search` 已接入 Tavily 真实搜索
+- **RAG 两阶段检索** —— pgvector HNSW 余弦召回 + DeepSeek listwise 重排（重排失败回退召回序），`ragctl` CLI 一键灌库，未配置依赖时节点给出可读错误而非静默降级
 - **国际化（i18n）** —— 中文词表为唯一事实来源，英文词表由 DeepSeek 自动翻译生成（`npm run i18n:sync`），pre-commit 校验双语同步
 
 ## 目录结构
@@ -49,10 +50,25 @@ go run main.go        # 默认监听 :8080，可用 PORT 环境变量覆盖
 LLM 节点需要真实模型调用，在 `backend/.env` 配置（该文件已 gitignore）：
 
 ```
-DEEPSEEK_API_KEY=sk-xxx        # 必填（仅 LLM 节点需要）
+DEEPSEEK_API_KEY=sk-xxx        # 必填（仅 LLM 节点与 RAG 重排需要）
 DEEPSEEK_MODEL=deepseek-chat   # 可选，工作流引擎默认模型
 DEEPSEEK_BASE_URL=             # 可选，默认 https://api.deepseek.com/v1
+TAVILY_API_KEY=tvly-xxx        # 可选，web_search 工具（Tavily）
+HTTPS_PROXY=http://127.0.0.1:7897  # 可选，访问 Tavily 等外网 API 需代理时
 ```
+
+RAG 节点（可选，召回-重排两阶段检索）：
+
+```
+docker compose up -d           # backend/ 下，起 pgvector（宿主端口 5433）
+# backend/.env 追加：
+PG_DSN=postgres://agent:agent@localhost:5433/agent?sslmode=disable
+EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1   # 任意 OpenAI 兼容 /embeddings
+EMBEDDING_API_KEY=sk-xxx
+EMBEDDING_MODEL=BAAI/bge-m3                        # 1024 维；换模型须同步 EMBEDDING_DIM 并重新灌库
+```
+
+灌库：`cd backend && go run ./cmd/ragctl ingest --kb kb_main --file 知识库.txt`（按空行分段落、约 800 字符一块）。
 
 验证脚本：`bash backend/scripts/sse-smoke.sh`（三节点链事件序列 + TTFB 实测）、
 `curl -X POST localhost:8080/api/execute -d @backend/scripts/llm-e2e.json`（真实 API 端到端）。
