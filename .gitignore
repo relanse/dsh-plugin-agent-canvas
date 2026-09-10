@@ -1,0 +1,16 @@
+# Go
+backend/vendor/
+backend/*.exe
+backend/*.test
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Env
+.env
+backend/.env
+
+# OS
+.DS_Store
+Thumbs.db

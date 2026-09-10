@@ -1,0 +1,48 @@
+{
+  "name": "dsh-plugin-agent-canvas",
+  "version": "0.1.0",
+  "displayName": "Agent Canvas",
+  "description": "Visual Agent workflow builder — drag-and-drop DAG editor with GenUI streaming panel",
+  "author": "relanse",
+  "license": "MIT",
+  "repository": "https://github.com/relanse/dsh-plugin-agent-canvas",
+  "keywords": ["agent", "workflow", "genui", "dag", "react-flow"],
+  "dsh": {
+    "pluginApiVersion": "1.0",
+    "pluginType": "full-stack",
+    "server": {
+      "command": "go run ./backend/main.go",
+      "port": 8080,
+      "healthCheck": "/api/health"
+    },
+    "contributes": {
+      "panels": [
+        {
+          "id": "agent-canvas",
+          "title": "Agent Canvas",
+          "icon": "workflow",
+          "position": "sidebar",
+          "entrypoint": "frontend/dist/index.html"
+        }
+      ],
+      "tools": [
+        {
+          "name": "agent_canvas_run",
+          "description": "Execute a DAG workflow defined in Agent Canvas",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "workflowId": { "type": "string", "description": "ID of the saved workflow to run" },
+              "input": { "type": "string", "description": "Initial user input injected into the first LLM node" }
+            },
+            "required": ["workflowId", "input"]
+          }
+        }
+      ],
+      "commands": [
+        { "id": "agentCanvas.run", "title": "Run Agent Workflow", "shortcut": "Ctrl+Shift+R" },
+        { "id": "agentCanvas.clear", "title": "Clear Canvas" }
+      ]
+    }
+  }
+}
