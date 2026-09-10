@@ -22,7 +22,7 @@
           "title": "Agent Canvas",
           "icon": "workflow",
           "position": "sidebar",
-          "entrypoint": "frontend/dist/index.html"
+          "entrypoint": "lib/client.js"
         }
       ],
       "tools": [
