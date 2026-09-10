@@ -14,6 +14,8 @@ import { useDAG } from './hooks/useDAG'
 import { useNodeStatus } from './hooks/useNodeStatus'
 import { useSSE } from './hooks/useSSE'
 import { useCallImport } from './hooks/useCallImport'
+import type { CanvasNode } from './hooks/useDAG'
+import type { Edge } from 'reactflow'
 import type { AgentCanvasPanelProps } from './types/toolview'
 import type { SSEEvent } from './types'
 import './styles/tokens.css'
@@ -21,27 +23,68 @@ import './styles/app.css'
 
 const nodeTypes = { llm: LLMNode, tool: ToolNode, condition: ConditionNode, rag: RAGNode } as const
 
+/** 每张调用卡独立持久化键；无宿主（无 callId）时共用 draft 键 */
+function storageKeyFor(callId: string | undefined): string {
+  return `agent-canvas:dag:${callId ?? 'draft'}`
+}
+
 /**
  * tool.call.toolview 面板。DSH 会注入本次调用的 owner props
  * （callId / toolName / block）：block 里的参数被水合进画布、
  * 结果展示在顶部信息条；无宿主独立渲染时面板照常可用。
  */
 export function AgentCanvasPanel(props: AgentCanvasPanelProps = {}): JSX.Element {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, serialize, addNode, clear, loadWire } = useDAG()
+  const {
+    nodes, edges, dirty,
+    onNodesChange, onEdgesChange, onConnect,
+    serialize, addNode, clear, loadWire, loadCanvas,
+  } = useDAG()
   const { statusMap, reset: resetStatus, handleEvent: handleStatusEvent } = useNodeStatus()
   const { start: startSSE, stop: stopSSE } = useSSE()
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState<SSEEvent[]>([])
 
   const call = useCallImport(props.block)
+  const storageKey = storageKeyFor(call.callId)
+
+  // 挂载时恢复用户编辑（优先于 block 水合：编辑后的画布是用户数据）
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { nodes?: CanvasNode[]; edges?: Edge[] }
+      if (Array.isArray(parsed.nodes) && parsed.nodes.length > 0) {
+        loadCanvas(parsed.nodes, Array.isArray(parsed.edges) ? parsed.edges : [])
+        restoredRef.current = true
+      }
+    } catch {
+      /* 坏数据当不存在，走 block 水合 */
+    }
+    // 仅挂载时执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 用户编辑防抖持久化（程序化装载不触发）
+  useEffect(() => {
+    if (!dirty) return
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify({ nodes, edges }))
+      } catch {
+        /* 存储配额满等异常：静默放弃本次持久化 */
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [nodes, edges, dirty, storageKey])
 
   // 一次性水合：同一 callId 只导入一次（running→settle 的 block 更新不重放），
-  // 且绝不覆盖用户已摆好的画布；导入后 fitView 让多节点 DAG 整体可见
+  // 已恢复用户编辑时跳过；导入后 fitView 让多节点 DAG 整体可见
   const rfRef = useRef<ReactFlowInstance | null>(null)
   const hydratedRef = useRef<string | null>(null)
   useEffect(() => {
     if (call.dag === null || call.callId === undefined || call.callId === hydratedRef.current) return
-    if (nodes.length > 0) return
+    if (restoredRef.current || nodes.length > 0) return
     loadWire(call.dag)
     hydratedRef.current = call.callId
     const timer = setTimeout(() => rfRef.current?.fitView({ padding: 0.15, duration: 400 }), 60)
@@ -64,6 +107,14 @@ export function AgentCanvasPanel(props: AgentCanvasPanelProps = {}): JSX.Element
 
   const handleStop = useCallback(() => { stopSSE(); setRunning(false) }, [stopSSE])
 
+  // 清空 = 用户显式放弃当前画布：清存储、标记本 callId 已处理，
+  // 避免清空后立刻被 block 参数重新水合
+  const handleClear = useCallback(() => {
+    clear()
+    try { localStorage.removeItem(storageKey) } catch { /* 忽略 */ }
+    hydratedRef.current = call.callId ?? '__cleared__'
+  }, [clear, storageKey, call.callId])
+
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     const type = e.dataTransfer.getData('nodeType') as 'llm' | 'tool' | 'condition' | 'rag'
@@ -75,7 +126,7 @@ export function AgentCanvasPanel(props: AgentCanvasPanelProps = {}): JSX.Element
 
   return (
     <div className="app-shell">
-      <Toolbar onRun={handleRun} onStop={handleStop} onClear={clear} running={running} />
+      <Toolbar onRun={handleRun} onStop={handleStop} onClear={handleClear} running={running} />
       <CallBanner
         visible={call.dag !== null}
         state={call.state}

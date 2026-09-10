@@ -7,7 +7,7 @@ import type { WireDAG } from '../types/toolview'
 import type { NodeData, NodeType } from '../types'
 
 /** reactflow 画布节点：业务数据 NodeData 挂在 data 上，nodeType 冗余存一份便于序列化 */
-type CanvasNode = Node<NodeData>
+export type CanvasNode = Node<NodeData>
 
 let nodeCounter = 0
 
@@ -47,17 +47,29 @@ function defaultsFor(type: NodeType, toolName?: string): NodeData {
 export function useDAG() {
   const [nodes, setNodes] = useState<CanvasNode[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
+  // dirty：用户是否手动编辑过（区别于 loadWire/loadCanvas 的程序化装载），
+  // 面板据此决定是否持久化到 localStorage
+  const [dirty, setDirty] = useState(false)
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    (changes: NodeChange[]) => {
+      setNodes((nds) => applyNodeChanges(changes, nds))
+      setDirty(true)
+    },
     [],
   )
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+    (changes: EdgeChange[]) => {
+      setEdges((eds) => applyEdgeChanges(changes, eds))
+      setDirty(true)
+    },
     [],
   )
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
+    (params: Connection) => {
+      setEdges((eds) => addEdge({ ...params, animated: true }, eds))
+      setDirty(true)
+    },
     [],
   )
 
@@ -74,17 +86,20 @@ export function useDAG() {
     nodeCounter++
     const id = `node-${nodeCounter}`
     setNodes((nds) => [...nds, { id, type, position, data: defaultsFor(type, toolName) }])
+    setDirty(true)
   }, [])
 
   const clear = useCallback(() => {
     setNodes([])
     setEdges([])
+    setDirty(false)
     nodeCounter = 0
   }, [])
 
   /**
    * 导入 AI 调用提交的线协议 DAG：wire 节点没有画布坐标，按分层布局落位；
    * data 缺字段时用该类型默认值兜底，保证任意来源的节点都能渲染。
+   * 程序化装载不置 dirty（不触发持久化）。
    */
   const loadWire = useCallback((dag: WireDAG) => {
     const positions = layeredLayout(dag.nodes, dag.edges)
@@ -115,7 +130,19 @@ export function useDAG() {
         animated: true,
       })),
     )
+    setDirty(false)
   }, [])
 
-  return { nodes, edges, onNodesChange, onEdgesChange, onConnect, serialize, addNode, clear, loadWire }
+  /** 恢复持久化的画布（含坐标的完整节点/边），同样不置 dirty */
+  const loadCanvas = useCallback((restoredNodes: CanvasNode[], restoredEdges: Edge[]) => {
+    setNodes(restoredNodes)
+    setEdges(restoredEdges)
+    setDirty(false)
+  }, [])
+
+  return {
+    nodes, edges, dirty,
+    onNodesChange, onEdgesChange, onConnect,
+    serialize, addNode, clear, loadWire, loadCanvas,
+  }
 }

@@ -7,11 +7,14 @@
 ## 功能特性
 
 - **拖拽式 DAG 编辑** —— LLM / 工具 / 条件 / RAG 四类节点，自由连线成有向无环图
-- **执行前环检测** —— Kahn 算法一次遍历同时完成环校验与拓扑排序，带环的图直接 HTTP 400
-- **GenUI 流式面板** —— 后端推送带类型的 JSON 事件（`tool_call`、`llm_chunk`、`node_error`…），前端把每种 `type` 映射为专属 React 组件
+- **分层并发调度** —— Kahn 分层拓扑：同层互不依赖的节点以 goroutine 并发执行（`sync.WaitGroup`），任一节点失败即取消整层；事件流经 mutex 串行化保证单节点内顺序稳定
+- **执行前环检测** —— 分层 Kahn 一次遍历同时完成环校验与分层排序，带环的图直接 HTTP 400
+- **GenUI 流式面板** —— 后端推送带类型的 JSON 事件（`tool_call`、`llm_chunk`、`node_error`…），前端把每种 `type` 映射为专属 React 组件；同一 LLM 节点的流式 chunk 合并为一张连续输出卡片
+- **toolview 调用上下文** —— 面板消费 DSH 注入的 `ToolCallOwnerProps`：AI 调用 `run_workflow` 提交的节点图自动水合进画布（分层自动布局 + fitView），调用状态与输出展示在信息条
+- **画布编辑持久化** —— 每张调用卡按 `callId` 独立存储（localStorage 防抖写入），刷新后用户编辑优先于调用参数重新水合
 - **双层循环防护** —— 静态环检测 + 运行时 `maxSteps` 工具调用上限，逼近上限前 3 步发出 `step_limit_warning`
 - **统一工具注册表** —— 工具以 JSON Schema 注册一次，`GET /api/tools` 同时供 LLM Function Calling 与前端节点面板消费
-- **国际化（i18n）** —— UI 文案与文档均支持中英双语，详见下文
+- **国际化（i18n）** —— 中文词表为唯一事实来源，英文词表由 DeepSeek 自动翻译生成（`npm run i18n:sync`），pre-commit 校验双语同步
 
 ## 目录结构
 
@@ -41,34 +44,42 @@ cd backend
 go run main.go        # 默认监听 :8080，可用 PORT 环境变量覆盖
 ```
 
-健康检查：`GET http://localhost:8080/api/health`
+健康检查：`GET http://localhost:8080/api/health`；默认模型：`GET /api/config`。
+
+LLM 节点需要真实模型调用，在 `backend/.env` 配置（该文件已 gitignore）：
+
+```
+DEEPSEEK_API_KEY=sk-xxx        # 必填（仅 LLM 节点需要）
+DEEPSEEK_MODEL=deepseek-chat   # 可选，工作流引擎默认模型
+DEEPSEEK_BASE_URL=             # 可选，默认 https://api.deepseek.com/v1
+```
+
+验证脚本：`bash backend/scripts/sse-smoke.sh`（三节点链事件序列 + TTFB 实测）、
+`curl -X POST localhost:8080/api/execute -d @backend/scripts/llm-e2e.json`（真实 API 端到端）。
 
 ### 2. 构建插件
 
 ```bash
-npm install           # 需在 DSH workspace 内解析 @deepseek-ai/* 依赖
-npm run bundle        # tsdown 打包，产出 lib/index.js 与 lib/client.js
+npm run bundle        # tsdown 打包 + 产物自检（schema 投影 / 依赖内联断言）
 npm run watch         # 开发时增量构建
 ```
 
 Host 端工具调用后端地址可用 `AGENT_CANVAS_BACKEND` 环境变量覆盖（默认 `http://localhost:8080`）。
 
-不在 DSH workspace 内时也可以做本地类型冒烟检查（`@deepseek-ai/*` 由 `typecheck-stubs.d.ts` 提供最小接口 stub）：
-
-```bash
-npm i --no-save typescript @types/react react react-dom reactflow
-npx tsc -p typecheck.tsconfig.json
-```
+仓库的 `@deepseek-ai/*` 依赖为 DSH workspace 协议：DSH 检出内用 pnpm 直接装；
+独立环境下运行 `DSH_ROOT=/path/to/harness bash scripts/bootstrap-node-deps.sh`
+引导开发依赖（junction + 类型桩 + 公开依赖）。
 
 ## 国际化（i18n）
 
 UI 文案不写死在组件里，统一走词表：
 
-- `src/client/i18n/locales/zh-CN.ts` —— 简体中文词表，同时是类型基准（`Messages` 结构由它推导）
-- `src/client/i18n/locales/en-US.ts` —— 英文词表，结构强制对齐中文词表，漏译会在编译期报错
-- 运行时通过 `t('key', params)` 取文案并做 `{name}` 插值；`useI18n()` 基于 `useSyncExternalStore` 订阅语言切换
-- 语言优先级：用户手动选择（localStorage）> DSH 平台 `locale` 服务 > 浏览器语言 > zh-CN；插件激活时由 `src/client/index.ts` 读取平台语言初始化
-- 新增语言：复制一份词表文件、在 `i18n/index.ts` 的 `catalogs` 中注册即可
+- `src/client/i18n/locales/zh.ts` —— 简体中文词表，唯一事实来源（`MessageKey` 类型由它推导）
+- `src/client/i18n/locales/en.ts` —— 英文词表，**自动生成**：新增/修改中文文案后运行
+  `npm run i18n:sync`，缺失 key 由 DeepSeek（JSON 模式）翻译补齐，`{name}` 插值占位符强制保留
+- 运行时经 `ctx.locale.register('agent-canvas', {zh, en})` 注册进 DSH 官方 locale 服务，
+  语言切换与持久化由平台负责；独立渲染时回退内置中文词表
+- `npm run i18n:check`（pre-commit 钩子内置）校验双语同步，缺失即拦截提交
 
 文档双语：英文原文在 `docs/`，中文版在 `docs/zh-CN/`，各文件顶部有互相跳转链接。
 
