@@ -2,14 +2,18 @@
 backend/vendor/
 backend/*.exe
 backend/*.test
+backend/server
 
-# Node
-frontend/node_modules/
-frontend/dist/
+# Node / DSH plugin build output
+node_modules/
+lib/
 
 # Env
 .env
 backend/.env
+
+# 旧的 Vite 前端（已迁移到 src/client/）
+frontend/
 
 # OS
 .DS_Store
