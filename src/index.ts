@@ -38,17 +38,21 @@ export function apply(ctx: Context): void {
         nodes: {
           type: 'array',
           required: true,
+          // items 省略 = 接受任意 JSON 元素；显式声明对齐官方工具写法
+          items: { type: 'json' },
           description:
             'DAG 节点列表，每个节点含 id、type（llm/tool/condition/rag）和 data 配置',
         },
         edges: {
           type: 'array',
           required: true,
+          items: { type: 'json' },
           description: '节点连接边列表，每条边含 source 和 target 节点 id',
         },
         userInput: {
           type: 'string',
-          required: false,
+          // 可选参数不写 required：DSL 约束为 required?: true，
+          // 写 false 会让 defineTool 的 schema 投影直接失败
           description: '注入到第一个 LLM 节点的用户输入（可选）',
         },
       },
