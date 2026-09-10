@@ -1,0 +1,7 @@
+# i18n 词表同步校验：en 与 zh 不齐则拦截提交（修复：npm run i18n:sync）
+node scripts/i18n-sync.mjs --check
+
+# Go 后端快速回归（无 Go 环境时跳过，不阻塞前端贡献者）
+if command -v go >/dev/null 2>&1; then
+  (cd backend && go vet ./... && go test ./... -count=1)
+fi

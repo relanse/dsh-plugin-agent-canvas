@@ -22,3 +22,4 @@ Thumbs.db
 # Go 构建产物与运行日志
 backend/agent-canvas-backend.exe
 backend/backend-run.log
+backend/*.exe~

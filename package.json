@@ -30,9 +30,9 @@
     }
   },
   "scripts": {
-    "bundle": "tsdown",
+    "bundle": "tsdown && node scripts/verify-bundle.mjs",
     "watch": "tsdown --watch",
-    "prepare": "tsdown",
+    "prepare": "husky || true && tsdown",
     "dev:backend": "cd backend && go run main.go",
     "i18n:sync": "node scripts/i18n-sync.mjs",
     "i18n:check": "node scripts/i18n-sync.mjs --check"
@@ -48,6 +48,7 @@
     "@deepseek-ai/dsh-client-locale": "workspace:^",
     "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
     "@types/react": "~18.3.1",
+    "husky": "^9.1.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "reactflow": "^11.11.4",
