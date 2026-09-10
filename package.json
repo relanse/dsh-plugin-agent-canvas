@@ -33,7 +33,9 @@
     "bundle": "tsdown",
     "watch": "tsdown --watch",
     "prepare": "tsdown",
-    "dev:backend": "cd backend && go run main.go"
+    "dev:backend": "cd backend && go run main.go",
+    "i18n:sync": "node scripts/i18n-sync.mjs",
+    "i18n:check": "node scripts/i18n-sync.mjs --check"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^0.1.0"
