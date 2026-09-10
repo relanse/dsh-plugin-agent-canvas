@@ -23,3 +23,4 @@ Thumbs.db
 backend/agent-canvas-backend.exe
 backend/backend-run.log
 backend/*.exe~
+.scratch/

@@ -125,3 +125,44 @@
 .rf-node--condition .rf-node__dot    { background: var(--color-node-condition); }
 .rf-node--rag       .rf-node__header { background: var(--color-node-rag-bg); }
 .rf-node--rag       .rf-node__dot    { background: var(--color-node-rag); }
+
+/* toolview 调用信息条：导入摘要 + 调用生命周期状态 + 可展开输出 */
+.call-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  padding: var(--space-1, 4px) var(--space-4, 16px);
+  font-size: 12px;
+  color: var(--color-body);
+  background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border);
+  min-height: 28px;
+}
+.call-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.call-running .call-dot { background: #f0a020; animation: call-pulse 1.2s ease-in-out infinite; }
+.call-ok .call-dot { background: var(--color-ok, #2da44e); }
+.call-error .call-dot { background: var(--color-danger, #cf222e); }
+.call-stopped .call-dot { background: var(--color-muted); }
+@keyframes call-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.call-import { font-weight: 500; }
+.call-input { color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+.call-state { font-weight: 600; }
+.st-running { color: #b8860b; }
+.st-ok { color: var(--color-ok, #2da44e); }
+.st-error, .st-stopped { color: var(--color-danger, #cf222e); }
+.call-output { flex-basis: 100%; }
+.call-output summary { cursor: pointer; color: var(--color-muted); user-select: none; }
+.call-output pre {
+  margin: var(--space-1, 4px) 0 2px;
+  padding: var(--space-2, 8px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  max-height: 160px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

@@ -43,6 +43,16 @@ export const en: Messages = {
   "node.notConfigured": "Not configured",
   "node.defaultPrompt": "You are a helpful assistant.",
 
+  // toolview 调用卡片
+  "toolview.imported": "Imported AI workflow ({count} nodes)",
+
+  "toolview.userInput": "User input",
+  "toolview.running": "AI call in progress…",
+  "toolview.ok": "AI call complete",
+  "toolview.error": "AI call failed",
+  "toolview.stopped": "AI call interrupted",
+  "toolview.output": "Call output",
+
   // GenUI 流式面板
   "genui.llmOutput": "LLM Output",
 

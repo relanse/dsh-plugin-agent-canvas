@@ -36,6 +36,15 @@ export const zh = {
   'node.notConfigured': '未配置',
   'node.defaultPrompt': '你是一个乐于助人的助手。',
 
+  // toolview 调用卡片
+  'toolview.imported': '已导入 AI 提交的工作流（{count} 个节点）',
+  'toolview.userInput': '用户输入',
+  'toolview.running': 'AI 调用执行中…',
+  'toolview.ok': 'AI 调用完成',
+  'toolview.error': 'AI 调用失败',
+  'toolview.stopped': 'AI 调用已中断',
+  'toolview.output': '调用输出',
+
   // GenUI 流式面板
   'genui.llmOutput': 'LLM 输出',
   'genui.calling': '调用中…',

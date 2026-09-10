@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react'
 import { addEdge, applyNodeChanges, applyEdgeChanges } from 'reactflow'
 import type { Connection, Edge, EdgeChange, Node, NodeChange } from 'reactflow'
 import { t } from '../i18n'
+import { layeredLayout } from '../utils/layout'
+import type { WireDAG } from '../types/toolview'
 import type { NodeData, NodeType } from '../types'
 
 /** reactflow 画布节点：业务数据 NodeData 挂在 data 上，nodeType 冗余存一份便于序列化 */
@@ -80,5 +82,40 @@ export function useDAG() {
     nodeCounter = 0
   }, [])
 
-  return { nodes, edges, onNodesChange, onEdgesChange, onConnect, serialize, addNode, clear }
+  /**
+   * 导入 AI 调用提交的线协议 DAG：wire 节点没有画布坐标，按分层布局落位；
+   * data 缺字段时用该类型默认值兜底，保证任意来源的节点都能渲染。
+   */
+  const loadWire = useCallback((dag: WireDAG) => {
+    const positions = layeredLayout(dag.nodes, dag.edges)
+    const known: readonly string[] = ['llm', 'tool', 'condition', 'rag']
+    setNodes(
+      dag.nodes.map((n, i) => {
+        const type = (known.includes(n.type) ? n.type : 'tool') as NodeType
+        const base = defaultsFor(type)
+        const wire = (n.data ?? {}) as Partial<NodeData>
+        return {
+          id: n.id,
+          type,
+          position: positions.get(n.id) ?? { x: 60, y: 60 + i * 130 },
+          data: {
+            ...base,
+            ...wire,
+            nodeType: type,
+            label: typeof wire.label === 'string' && wire.label !== '' ? wire.label : base.label,
+          },
+        }
+      }),
+    )
+    setEdges(
+      dag.edges.map((e, i) => ({
+        id: `e-${i}-${e.source}-${e.target}`,
+        source: e.source,
+        target: e.target,
+        animated: true,
+      })),
+    )
+  }, [])
+
+  return { nodes, edges, onNodesChange, onEdgesChange, onConnect, serialize, addNode, clear, loadWire }
 }
