@@ -1,54 +1,38 @@
 /**
- * 轻量 i18n 运行时：词表查值 + 语言订阅，无第三方依赖。
+ * i18n 适配层：词表注册进 DSH 官方 locale 服务，组件侧 API（t / useI18n）不变。
  *
- * - t(key, params) 在组件渲染期同步取词，缺 key 时回退默认语言，再回退 key 本身
- * - useI18n() 基于 useSyncExternalStore 订阅语言切换，setLocale 后整棵组件树自动重渲染
- * - 语言优先级：用户手动选择（localStorage）> DSH 平台 locale 服务 > 浏览器语言 > zh-CN
- * - DSH 平台侧在插件激活时调用 initI18n(platformLocale)，优先级高于浏览器检测
+ * - attachI18n(ctx) 由插件入口调用：ctx.locale.register 注册 zh/en 双词典、
+ *   bind 拿到稳定翻译函数、订阅平台快照驱动组件重渲染
+ * - 无宿主环境（单测 / 独立运行）时 t 回退内置 zh 词表，组件照常工作
+ * - 语言切换、持久化、浏览器检测、zh→en 回退链全部由平台 locale 服务负责，
+ *   本模块不再自建这些机制
  */
 
 import { useSyncExternalStore } from 'react'
-import zhCN from './locales/zh-CN'
-import enUS from './locales/en-US'
-import type { MessageKey, Messages } from './locales/en-US'
+import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
+import { zh, type MessageKey } from './locales/zh'
+import { en } from './locales/en'
 
-export type Locale = 'zh-CN' | 'en-US'
-export type { MessageKey, Messages }
+export { type MessageKey } from './locales/zh'
+export type Messages = Record<MessageKey, string>
 
-export const LOCALES: readonly Locale[] = ['zh-CN', 'en-US'] as const
+/** 注册进 ctx.locale 的命名空间 */
+export const NS = 'agent-canvas'
 
-const DEFAULT_LOCALE: Locale = 'zh-CN'
-const STORAGE_KEY = 'agent-canvas-locale'
+export type Locale = 'zh' | 'en'
 
-const catalogs: Record<Locale, Messages> = { 'zh-CN': zhCN, 'en-US': enUS }
+interface LocaleService {
+  register(ns: string, dicts: Record<string, Record<string, string>>): () => void
+  bind(ns: string): Translate
+  subscribe(fn: () => void): () => void
+  getLocale(): { active: string; revision: number }
+}
+
+let platformT: Translate | undefined
+let getPlatformSnapshot: (() => { active: string; revision: number }) | undefined
 
 const listeners = new Set<() => void>()
-let currentLocale: Locale = detectLocale()
-
-function isLocale(value: unknown): value is Locale {
-  return typeof value === 'string' && (LOCALES as readonly string[]).includes(value)
-}
-
-/** 把任意 BCP-47 标签（'zh'、'en-US'、'en_us'…）归一到受支持的 Locale */
-export function normalizeLocale(tag: string | undefined | null): Locale | undefined {
-  if (!tag) return undefined
-  const lower = tag.toLowerCase()
-  if (isLocale(lower)) return lower as Locale
-  if (lower.startsWith('zh')) return 'zh-CN'
-  if (lower.startsWith('en')) return 'en-US'
-  return undefined
-}
-
-function detectLocale(): Locale {
-  try {
-    const normalized = normalizeLocale(localStorage.getItem(STORAGE_KEY))
-    if (normalized) return normalized
-  } catch {
-    // 沙箱环境可能禁用 localStorage，静默降级
-  }
-  const nav = typeof navigator !== 'undefined' ? navigator.language : undefined
-  return normalizeLocale(nav) ?? DEFAULT_LOCALE
-}
+const STANDALONE_SNAPSHOT = { active: 'zh', revision: 0 }
 
 function notify(): void {
   for (const listener of listeners) listener()
@@ -59,56 +43,40 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-export function getLocale(): Locale {
-  return currentLocale
+function getSnapshot(): { active: string; revision: number } {
+  return getPlatformSnapshot?.() ?? STANDALONE_SNAPSHOT
 }
 
-/** 切换语言。persist=false 供平台 locale 服务驱动时使用（不写 localStorage） */
-export function setLocale(locale: Locale, options?: { persist?: boolean }): void {
-  if (!isLocale(locale) || locale === currentLocale) return
-  currentLocale = locale
-  if (options?.persist !== false) {
-    try {
-      localStorage.setItem(STORAGE_KEY, locale)
-    } catch {
-      // 同上，静默降级
-    }
-  }
-  notify()
+/**
+ * 插件激活时由入口调用，把词表挂到平台 locale 服务上。
+ * 注册与订阅都放进 ctx.effect，插件卸载时自动注销。
+ */
+export function attachI18n(ctx: {
+  effect(fn: () => unknown): unknown
+  locale: LocaleService
+}): void {
+  const { locale } = ctx
+  ctx.effect(() => locale.register(NS, { zh, en }))
+  platformT = locale.bind(NS)
+  getPlatformSnapshot = () => locale.getLocale()
+  ctx.effect(() => locale.subscribe(() => notify()))
 }
 
-/** 插件激活时由入口调用，platformLocale 来自 DSH locale 服务（可为空） */
-export function initI18n(platformLocale?: string | null): Locale {
-  let stored: Locale | undefined
-  try {
-    stored = normalizeLocale(localStorage.getItem(STORAGE_KEY))
-  } catch {
-    stored = undefined
-  }
-  // 用户在面板里手动选过的语言优先于平台默认
-  const fromPlatform = normalizeLocale(platformLocale)
-  const fromBrowser = normalizeLocale(typeof navigator !== 'undefined' ? navigator.language : undefined)
-  currentLocale = stored ?? fromPlatform ?? fromBrowser ?? DEFAULT_LOCALE
-  notify()
-  return currentLocale
-}
-
-/** 取词并做 {name} 插值；缺 key 时先回退默认语言，再回退 key 本身便于排查 */
+/** 取词并做 {name} 插值；平台缺失 key 时由其回退链兜底，独立模式回退 zh 词表 */
 export function t(key: MessageKey, params?: Record<string, string | number>): string {
-  const template =
-    catalogs[currentLocale][key] ?? catalogs[DEFAULT_LOCALE][key] ?? key
+  if (platformT) return platformT(key, params)
+  const template = zh[key] ?? key
   if (!params) return template
   return template.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
     name in params ? String(params[name]) : placeholder,
   )
 }
 
-/** 组件内订阅语言变化：const { t, locale, setLocale } = useI18n() */
+/** 组件内订阅语言变化：const { t } = useI18n() */
 export function useI18n(): {
   t: typeof t
   locale: Locale
-  setLocale: typeof setLocale
 } {
-  const locale = useSyncExternalStore(subscribe, getLocale)
-  return { t, locale, setLocale }
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot)
+  return { t, locale: snapshot.active === 'en' ? 'en' : 'zh' }
 }

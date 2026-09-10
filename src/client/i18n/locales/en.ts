@@ -1,16 +1,16 @@
 /**
- * English (US) catalog. Record<MessageKey, string> forces this file to cover
- * every key in zh-CN.ts (the type baseline) — a missing key fails compilation.
+ * English dictionary. The shape mirrors zh.ts key-for-key; registration
+ * goes through ctx.locale.register('agent-canvas', { zh, en }), whose
+ * per-namespace bilingual balance requirement makes a missing key a
+ * registration-time hole, so keep both files aligned when editing.
  */
 
-import type zhCN from './zh-CN'
+import type { MessageKey } from './zh'
 
-export type MessageKey = keyof typeof zhCN
 export type Messages = Record<MessageKey, string>
 
-const enUS: Messages = {
+export const en: Messages = {
   // Toolbar
-
   'toolbar.run': 'Run',
   'toolbar.stop': 'Stop',
   'toolbar.clear': 'Clear',
@@ -56,5 +56,3 @@ const enUS: Messages = {
   'genui.stepLimitWarning': 'Step limit approaching ({current}/{max})',
   'genui.emptyHint': 'Drag nodes onto the canvas, connect them, then click "Run" to watch execution live.',
 }
-
-export default enUS

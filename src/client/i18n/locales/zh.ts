@@ -1,9 +1,10 @@
 /**
- * 简体中文词表 —— 类型基准（MessageKey 由本文件推导，其他语言必须对齐）。
- * key 采用扁平点路径（i18next 惯例），按命名空间分组排列。
+ * 简体中文词表 —— 类型基准（MessageKey 由本文件推导）。
+ * key 采用扁平点路径，模板支持 {name} 插值，与 DSH locale 服务的
+ * LocaleDict 约定一致；通过 ctx.locale.register('agent-canvas', {zh, en}) 注册。
  */
 
-export default {
+export const zh = {
   // 工具栏
   'toolbar.run': '运行',
   'toolbar.stop': '停止',
@@ -49,4 +50,6 @@ export default {
   'genui.workflowError': '工作流错误',
   'genui.stepLimitWarning': '步数即将耗尽（{current}/{max}）',
   'genui.emptyHint': '拖入节点并连线，点击"运行"查看实时执行过程。',
-}
+} as const
+
+export type MessageKey = keyof typeof zh
