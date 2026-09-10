@@ -79,14 +79,20 @@ export function AgentCanvasPanel(props: AgentCanvasPanelProps = {}): JSX.Element
   }, [nodes, edges, dirty, storageKey])
 
   // 一次性水合：同一 callId 只导入一次（running→settle 的 block 更新不重放），
-  // 已恢复用户编辑时跳过；导入后 fitView 让多节点 DAG 整体可见
+  // 已恢复用户编辑时跳过；画布已有内容时也跳过，避免多次思考覆盖现有工作流
+  // 导入后 fitView 让多节点 DAG 整体可见
   const rfRef = useRef<ReactFlowInstance | null>(null)
   const hydratedRef = useRef<string | null>(null)
+  const hasHydratedOnce = useRef(false)
   useEffect(() => {
-    if (call.dag === null || call.callId === undefined || call.callId === hydratedRef.current) return
-    if (restoredRef.current || nodes.length > 0) return
+    if (call.dag === null || call.callId === undefined) return
+    // 已经水合过任何一次，或已有用户内容，跳过后续水合
+    if (hasHydratedOnce.current || restoredRef.current || nodes.length > 0) return
+    // 同一 callId 不重复水合
+    if (call.callId === hydratedRef.current) return
     loadWire(call.dag)
     hydratedRef.current = call.callId
+    hasHydratedOnce.current = true
     const timer = setTimeout(() => rfRef.current?.fitView({ padding: 0.15, duration: 400 }), 60)
     return () => clearTimeout(timer)
   }, [call.dag, call.callId, nodes.length, loadWire])
@@ -107,13 +113,14 @@ export function AgentCanvasPanel(props: AgentCanvasPanelProps = {}): JSX.Element
 
   const handleStop = useCallback(() => { stopSSE(); setRunning(false) }, [stopSSE])
 
-  // 清空 = 用户显式放弃当前画布：清存储、标记本 callId 已处理，
-  // 避免清空后立刻被 block 参数重新水合
+  // 清空 = 用户显式放弃当前画布：清存储、重置水合标记，
+  // 允许后续导入新的工作流
   const handleClear = useCallback(() => {
     clear()
     try { localStorage.removeItem(storageKey) } catch { /* 忽略 */ }
-    hydratedRef.current = call.callId ?? '__cleared__'
-  }, [clear, storageKey, call.callId])
+    hydratedRef.current = null
+    hasHydratedOnce.current = false
+  }, [clear, storageKey])
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
