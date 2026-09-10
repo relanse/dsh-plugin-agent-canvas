@@ -1,0 +1,16 @@
+{
+  "userInput": "计算 12 乘以 12",
+  "nodes": [
+    {
+      "id": "brain",
+      "type": "llm",
+      "data": {
+        "model": "qwen3:8b",
+        "systemPrompt": "你是计算助手。必须调用 calculator 工具完成所有算术计算，禁止心算。得到工具结果后用一句中文报出答案。",
+        "userPrompt": "{{__input__}}",
+        "maxSteps": 8
+      }
+    }
+  ],
+  "edges": []
+}

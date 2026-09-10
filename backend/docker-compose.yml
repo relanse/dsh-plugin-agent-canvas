@@ -1,9 +1,14 @@
-# RAG 节点依赖：向量库 + 本地嵌入模型（全部本地化，无需云端 Key）。
+# RAG 节点依赖：向量库 + 嵌入模型（全部本地化，无需云端 Key）。
 # 用法：docker compose up -d
 # 宿主端口避开本机已占用：5433（pgvector，避开 deploy 栈的 5432）、8081（嵌入）
 # 然后在 backend/.env 加：
 #   PG_DSN=postgres://agent:agent@localhost:5433/agent?sslmode=disable
 #   EMBEDDING_BASE_URL=http://localhost:8081/v1   # TEI 的 OpenAI 兼容端点，无需 Key
+#
+# GPU 提速方案：本 compose 的 TEI 是 CPU 版（单条嵌入约 57ms，够用）。
+# TEI 的 CUDA 镜像尚不支持 Blackwell（RTX 50 系，实测 "Could not start
+# a suitable backend"）；要 GPU 加速嵌入（或本地 LLM）改装 Ollama——
+# 原生支持 RTX 50 系，EMBEDDING_BASE_URL 指向 http://localhost:11434/v1 即可。
 services:
   pgvector:
     image: pgvector/pgvector:pg17
@@ -22,10 +27,10 @@ services:
       timeout: 3s
       retries: 10
 
-  # HuggingFace TEI 跑 BAAI/bge-m3（1024 维，多语，CPU 可用）。
+  # HuggingFace TEI 跑 BAAI/bge-m3（1024 维，多语，CPU 推理）。
   # 首次启动自动下载模型（约 2.3GB）；直连 HF 需走宿主代理
   # （hf-mirror 缺 etag 响应头，TEI 下载器不认）。
-  # 无 healthcheck：TEI 极简镜像无 curl，就绪状态看 `docker logs agent-canvas-embed`
+  # 就绪状态看 docker logs agent-canvas-embed。
   embeddings:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     container_name: agent-canvas-embed
