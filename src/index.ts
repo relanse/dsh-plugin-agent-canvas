@@ -33,7 +33,14 @@ export function apply(ctx: Context): void {
     defineTool({
       name: 'run_workflow',
       description:
-        '执行一个可视化 Agent 工作流。将 DAG 节点图提交给后端按拓扑顺序调度，返回执行摘要。',
+        '执行一个可视化 Agent 工作流（DAG 按拓扑序调度，返回最后输出）。' +
+        '构造规则：① 用最少的节点完成任务——简单计算只需 1 个 tool 节点，不要加 LLM/条件节点；' +
+        '② tool 节点 data 必填 {toolName: string, staticArgs: object}；' +
+        '③ llm 节点 data 可选 {model?, systemPrompt?, maxSteps?, temperature?}，model 省略时用后端默认模型；' +
+        '④ condition 节点 data 填 {condition: "len <op> N"}（op: > >= < <= ==）。' +
+        '内置工具：calculator{expression:"A op B"}（op: + - * /，空格可有可无）、' +
+        'string_transform{text, operation: uppercase|lowercase|reverse|word_count}、web_search{query}。' +
+        'staticArgs 的值支持 "{{nodeId}}" 或 "{{__input__}}" 模板引用上游输出。',
       parameters: {
         nodes: {
           type: 'array',
@@ -41,19 +48,20 @@ export function apply(ctx: Context): void {
           // items 省略 = 接受任意 JSON 元素；显式声明对齐官方工具写法
           items: { type: 'json' },
           description:
-            'DAG 节点列表，每个节点含 id、type（llm/tool/condition/rag）和 data 配置',
+            'DAG 节点列表 [{id, type, data}]。type: "tool"（data 需 toolName + staticArgs）| ' +
+            '"llm"（data 可选 systemPrompt/model 等）| "condition"（data.condition）| "rag"',
         },
         edges: {
           type: 'array',
           required: true,
           items: { type: 'json' },
-          description: '节点连接边列表，每条边含 source 和 target 节点 id',
+          description: '节点连接边列表 [{source, target}]，source/target 为节点 id，不得成环',
         },
         userInput: {
           type: 'string',
           // 可选参数不写 required：DSL 约束为 required?: true，
           // 写 false 会让 defineTool 的 schema 投影直接失败
-          description: '注入到第一个 LLM 节点的用户输入（可选）',
+          description: '注入工作流的用户输入：LLM 节点未配置提示词时作为其输入，模板 {{__input__}} 可引用',
         },
       },
       output: {

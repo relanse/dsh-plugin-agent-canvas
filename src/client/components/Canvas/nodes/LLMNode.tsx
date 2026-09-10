@@ -18,7 +18,7 @@ export function LLMNode({ data }: { data: LLMNodeData }) {
       </div>
       <div className="rf-node__body">
         <div className="rf-node__field">{t('node.model')}</div>
-        <div className="rf-node__value">{data.model ?? 'deepseek-chat'}</div>
+        <div className="rf-node__value">{data.model ?? t('node.modelDefault')}</div>
         {data.systemPrompt && (<>
           <div className="rf-node__field" style={{ marginTop: 6 }}>{t('node.systemPrompt')}</div>
           <div className="rf-node__value" style={{ fontSize: 11, color: 'var(--color-muted)' }}>

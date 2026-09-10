@@ -24,3 +24,4 @@ backend/agent-canvas-backend.exe
 backend/backend-run.log
 backend/*.exe~
 .scratch/
+backend/dsh-web.log

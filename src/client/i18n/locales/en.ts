@@ -34,6 +34,7 @@ export const en: Messages = {
   "node.conditionTitle": "Condition",
   "node.ragTitle": "RAG Node",
   "node.model": "Model",
+  "node.modelDefault": "Default backend model",
   "node.systemPrompt": "System prompt",
   "node.maxSteps": "Max steps",
   "node.tool": "Tool",

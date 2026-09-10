@@ -36,6 +36,10 @@ func getLLMClient() *openai.Client {
 			// DeepSeek 兼容 OpenAI 协议，/v1 前缀与官方 SDK 约定一致
 			cfg.BaseURL = "https://api.deepseek.com/v1"
 		}
+		// 默认模型可经环境变量对齐（工作流引擎直连公网 API，与会话模型是两条通道）
+		if m := os.Getenv("DEEPSEEK_MODEL"); m != "" {
+			llmModel = m
+		}
 		llmInst = openai.NewClientWithConfig(cfg)
 	})
 	return llmInst

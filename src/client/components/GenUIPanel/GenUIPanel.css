@@ -132,3 +132,13 @@
   color: var(--color-danger);
 }
 .error-card__message { padding: var(--space-2) var(--space-3); font-size: 12px; color: #991b1b; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); }
+
+/* 流卡片头部的节点 id 徽标：多 LLM 节点工作流里区分输出来源 */
+.llm-stream-card__node {
+  margin-left: auto;
+  padding: 1px 6px;
+  font-size: 10px;
+  color: var(--color-muted);
+  background: var(--color-surface-2, #f0f2f7);
+  border-radius: 999px;
+}

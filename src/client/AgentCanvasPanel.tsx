@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import ReactFlow, { Background, Controls, MiniMap } from 'reactflow'
+import type { ReactFlowInstance } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { Toolbar } from './components/Toolbar'
 import { NodePalette } from './components/NodePalette'
@@ -35,13 +36,16 @@ export function AgentCanvasPanel(props: AgentCanvasPanelProps = {}): JSX.Element
   const call = useCallImport(props.block)
 
   // 一次性水合：同一 callId 只导入一次（running→settle 的 block 更新不重放），
-  // 且绝不覆盖用户已摆好的画布
+  // 且绝不覆盖用户已摆好的画布；导入后 fitView 让多节点 DAG 整体可见
+  const rfRef = useRef<ReactFlowInstance | null>(null)
   const hydratedRef = useRef<string | null>(null)
   useEffect(() => {
     if (call.dag === null || call.callId === undefined || call.callId === hydratedRef.current) return
     if (nodes.length > 0) return
     loadWire(call.dag)
     hydratedRef.current = call.callId
+    const timer = setTimeout(() => rfRef.current?.fitView({ padding: 0.15, duration: 400 }), 60)
+    return () => clearTimeout(timer)
   }, [call.dag, call.callId, nodes.length, loadWire])
 
   const handleRun = useCallback(() => {
@@ -86,6 +90,7 @@ export function AgentCanvasPanel(props: AgentCanvasPanelProps = {}): JSX.Element
             nodes={nodes.map((n) => ({ ...n, data: { ...n.data, status: statusMap[n.id] ?? 'idle' } }))}
             edges={edges} nodeTypes={nodeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
+            onInit={(instance) => { rfRef.current = instance }}
             fitView
           >
             <Background /><Controls />

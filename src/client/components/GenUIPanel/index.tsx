@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from 'react'
 import { useI18n } from '../../i18n'
 import type { SSEEvent, ToolCallPayload, ToolResultPayload, ToolErrorPayload } from '../../types'
 import { LLMStreamCard } from './LLMStreamCard'
@@ -49,12 +50,12 @@ function WorkflowStatusBar({ events, running }: { events: SSEEvent[]; running: b
 }
 
 // GenUI 核心：按 SSE 事件 type 分发到对应组件——AI 输出驱动 UI 形态而非纯文本拼接
+// （llm_chunk 不在此分发：由 coalesceEvents 合并成流卡片）
 function EventRenderer({ event }: { event: SSEEvent }) {
   const { t } = useI18n()
   switch (event.type) {
     case 'node_start':    return <NodeStartBadge payload={event.payload} />
     case 'node_done':     return <NodeDoneBadge payload={event.payload} />
-    case 'llm_chunk':     return <LLMStreamCard chunk={(event.payload as { text: string } | undefined)?.text ?? ''} />
     case 'tool_call':     return <ToolCallCard call={event.payload as ToolCallPayload} />
     case 'tool_result':   return <ToolCallCard result={event.payload as ToolResultPayload} />
     case 'tool_error':    return <ToolCallCard error={event.payload as ToolErrorPayload} />
@@ -68,16 +69,60 @@ function EventRenderer({ event }: { event: SSEEvent }) {
   }
 }
 
+type RenderItem =
+  | { kind: 'event'; event: SSEEvent }
+  | { kind: 'stream'; nodeId?: string; text: string }
+
+/**
+ * 把事件流折叠成渲染项：同一节点的连续 llm_chunk 合并成一张流卡片。
+ * 逐 chunk 一卡会导致输出碎成逐 token 的小片段（无法阅读），
+ * 非流事件打断合并——节点错误后的新输出另起一张卡。
+ */
+function coalesceEvents(events: SSEEvent[]): RenderItem[] {
+  const items: RenderItem[] = []
+  let current: { kind: 'stream'; nodeId?: string; text: string } | null = null
+  for (const e of events) {
+    if (e.type === 'llm_chunk') {
+      const text = (e.payload as { text?: string } | undefined)?.text ?? ''
+      if (current !== null && current.nodeId === e.nodeId) {
+        current.text += text
+      } else {
+        current = { kind: 'stream', nodeId: e.nodeId, text }
+        items.push(current)
+      }
+    } else {
+      current = null
+      items.push({ kind: 'event', event: e })
+    }
+  }
+  return items
+}
+
 export function GenUIPanel({ events, running }: { events: SSEEvent[]; running: boolean }) {
   const { t } = useI18n()
+  const streamRef = useRef<HTMLDivElement>(null)
+  const items = useMemo(() => coalesceEvents(events), [events])
+
+  // 容器级自动滚动：新事件到达时贴底（替代逐卡片 scrollIntoView 的抖动）
+  useEffect(() => {
+    const el = streamRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [items])
+
   return (
     <aside className="genui-panel">
       <WorkflowStatusBar events={events} running={running} />
-      <div className="genui-panel__stream">
+      <div className="genui-panel__stream" ref={streamRef}>
         {events.length === 0 && !running && (
           <div className="genui-panel__empty">{t('genui.emptyHint')}</div>
         )}
-        {events.map((event, i) => <EventRenderer key={i} event={event} />)}
+        {items.map((item, i) =>
+          item.kind === 'stream' ? (
+            <LLMStreamCard key={`s-${i}`} text={item.text} nodeId={item.nodeId} />
+          ) : (
+            <EventRenderer key={`e-${i}`} event={item.event} />
+          ),
+        )}
       </div>
     </aside>
   )

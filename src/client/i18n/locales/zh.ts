@@ -27,6 +27,7 @@ export const zh = {
   'node.conditionTitle': '条件判断',
   'node.ragTitle': 'RAG 节点',
   'node.model': '模型',
+  'node.modelDefault': '后端默认模型',
   'node.systemPrompt': '提示词',
   'node.maxSteps': '最大步数',
   'node.tool': '工具',
