@@ -1,3 +1,4 @@
+import { useI18n } from '../../i18n'
 import type { SSEEvent, ToolCallPayload, ToolResultPayload, ToolErrorPayload } from '../../types'
 import { LLMStreamCard } from './LLMStreamCard'
 import { ToolCallCard } from './ToolCallCard'
@@ -16,17 +17,19 @@ function NodeStartBadge({ payload }: { payload: unknown }) {
 }
 
 function NodeDoneBadge({ payload }: { payload: unknown }) {
+  const { t } = useI18n()
   const p = payload as { durationMs?: number }
   return (
     <div className="event event--node-done">
       <span className="event__icon">✓</span>
-      <span className="event__label">完成</span>
+      <span className="event__label">{t('genui.done')}</span>
       <span className="event__muted">{p?.durationMs}ms</span>
     </div>
   )
 }
 
 function WorkflowStatusBar({ events, running }: { events: SSEEvent[]; running: boolean }) {
+  const { t } = useI18n()
   const doneEvent = [...events].reverse().find((e) => e.type === 'workflow_done')
   const errorEvent = [...events].reverse().find((e) => e.type === 'workflow_error')
   const status = running ? 'running' : doneEvent ? 'done' : errorEvent ? 'error' : 'idle'
@@ -36,10 +39,10 @@ function WorkflowStatusBar({ events, running }: { events: SSEEvent[]; running: b
     <div className={`status-bar status-bar--${status}`}>
       <span className="status-bar__dot" />
       <span className="status-bar__text">
-        {status === 'idle' && '就绪'}
-        {status === 'running' && '执行中…'}
-        {status === 'done' && `完成 — ${donePayload?.totalDurationMs}ms`}
-        {status === 'error' && `错误：${errorPayload?.error}`}
+        {status === 'idle' && t('genui.statusIdle')}
+        {status === 'running' && t('genui.statusRunning')}
+        {status === 'done' && t('genui.statusDone', { ms: donePayload?.totalDurationMs ?? 0 })}
+        {status === 'error' && t('genui.statusError', { error: errorPayload?.error ?? '' })}
       </span>
     </div>
   )
@@ -47,6 +50,7 @@ function WorkflowStatusBar({ events, running }: { events: SSEEvent[]; running: b
 
 // GenUI 核心：按 SSE 事件 type 分发到对应组件——AI 输出驱动 UI 形态而非纯文本拼接
 function EventRenderer({ event }: { event: SSEEvent }) {
+  const { t } = useI18n()
   switch (event.type) {
     case 'node_start':    return <NodeStartBadge payload={event.payload} />
     case 'node_done':     return <NodeDoneBadge payload={event.payload} />
@@ -55,22 +59,23 @@ function EventRenderer({ event }: { event: SSEEvent }) {
     case 'tool_result':   return <ToolCallCard result={event.payload as ToolResultPayload} />
     case 'tool_error':    return <ToolCallCard error={event.payload as ToolErrorPayload} />
     case 'node_error':
-    case 'workflow_error': return <ErrorCard error={(event.payload as { error?: string } | undefined)?.error ?? '未知错误'} nodeId={event.nodeId} />
+    case 'workflow_error': return <ErrorCard error={(event.payload as { error?: string } | undefined)?.error ?? t('genui.unknownError')} nodeId={event.nodeId} />
     case 'step_limit_warning': {
       const p = event.payload as { currentStep?: number; maxSteps?: number }
-      return <div className="event event--warning">⚠ 步数即将耗尽（{p?.currentStep}/{p?.maxSteps}）</div>
+      return <div className="event event--warning">⚠ {t('genui.stepLimitWarning', { current: p?.currentStep ?? 0, max: p?.maxSteps ?? 0 })}</div>
     }
     default: return null
   }
 }
 
 export function GenUIPanel({ events, running }: { events: SSEEvent[]; running: boolean }) {
+  const { t } = useI18n()
   return (
     <aside className="genui-panel">
       <WorkflowStatusBar events={events} running={running} />
       <div className="genui-panel__stream">
         {events.length === 0 && !running && (
-          <div className="genui-panel__empty">拖入节点并连线，点击“运行”查看实时执行过程。</div>
+          <div className="genui-panel__empty">{t('genui.emptyHint')}</div>
         )}
         {events.map((event, i) => <EventRenderer key={i} event={event} />)}
       </div>

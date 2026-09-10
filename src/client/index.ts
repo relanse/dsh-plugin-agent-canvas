@@ -10,6 +10,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { AgentCanvasPanel } from './AgentCanvasPanel.tsx'
+import { initI18n } from './i18n'
 
 export const name = 'agent-canvas-client'
 
@@ -17,6 +18,19 @@ export const name = 'agent-canvas-client'
 export const inject = ['slots', 'locale']
 
 export function apply(ctx: ClientContext): void {
+  // 从平台 locale 服务读取用户语言初始化 i18n。
+  // locale 服务字段名做防御性探测（该包不在本仓库内，无法静态确认 API）；
+  // 均不可用时 initI18n 自行回退：localStorage > 浏览器语言 > zh-CN。
+  const platform = ctx.locale as unknown as {
+    locale?: string
+    lang?: string
+    language?: string
+    getLocale?: () => string
+  } | undefined
+  const platformLocale =
+    platform?.getLocale?.() ?? platform?.locale ?? platform?.lang ?? platform?.language
+  initI18n(platformLocale)
+
   // 向 tool.call.toolview slot 注册 AgentCanvas 面板
   // ctx.slots.inject 返回的 disposer 由 Cordis effect 在插件卸载时自动调用
   ctx.slots.inject('tool.call.toolview', () =>
