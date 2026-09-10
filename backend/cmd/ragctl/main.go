@@ -21,13 +21,19 @@ import (
 func main() {
 	_ = godotenv.Load()
 
+	// 子命令：当前只有 ingest；出现则跳过再解析 flag
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "ingest" {
+		args = args[1:]
+	}
+
 	var (
-		kb     = flag.String("kb", "", "知识库 id（RAG 节点的 knowledgeBaseId）")
-		file   = flag.String("file", "", "要灌入的文本文件路径")
-		chunk  = flag.Int("chunk", 800, "分块目标大小（字符）")
-		drop   = flag.Bool("drop", false, "灌库前清空该知识库")
+		kb    = flag.String("kb", "", "知识库 id（RAG 节点的 knowledgeBaseId）")
+		file  = flag.String("file", "", "要灌入的文本文件路径")
+		chunk = flag.Int("chunk", 800, "分块目标大小（字符）")
+		drop  = flag.Bool("drop", false, "灌库前清空该知识库")
 	)
-	flag.Parse()
+	flag.CommandLine.Parse(args)
 
 	if *kb == "" || *file == "" {
 		fmt.Fprintln(os.Stderr, "用法：ragctl ingest --kb <id> --file <path> [--chunk 800] [--drop]")

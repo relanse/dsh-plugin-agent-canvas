@@ -1,7 +1,9 @@
-# RAG 节点依赖的向量库：PostgreSQL 17 + pgvector。
+# RAG 节点依赖：向量库 + 本地嵌入模型（全部本地化，无需云端 Key）。
 # 用法：docker compose up -d
-# 宿主端口用 5433，避开本机其他 Postgres（如 deploy 栈）；
-# 然后在 backend/.env 加：PG_DSN=postgres://agent:agent@localhost:5433/agent?sslmode=disable
+# 宿主端口避开本机已占用：5433（pgvector，避开 deploy 栈的 5432）、8081（嵌入）
+# 然后在 backend/.env 加：
+#   PG_DSN=postgres://agent:agent@localhost:5433/agent?sslmode=disable
+#   EMBEDDING_BASE_URL=http://localhost:8081/v1   # TEI 的 OpenAI 兼容端点，无需 Key
 services:
   pgvector:
     image: pgvector/pgvector:pg17
@@ -20,5 +22,23 @@ services:
       timeout: 3s
       retries: 10
 
+  # HuggingFace TEI 跑 BAAI/bge-m3（1024 维，多语，CPU 可用）。
+  # 首次启动自动下载模型（约 2.3GB）；直连 HF 需走宿主代理
+  # （hf-mirror 缺 etag 响应头，TEI 下载器不认）。
+  # 无 healthcheck：TEI 极简镜像无 curl，就绪状态看 `docker logs agent-canvas-embed`
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    container_name: agent-canvas-embed
+    command: ["--model-id", "BAAI/bge-m3", "--auto-truncate"]
+    environment:
+      HTTPS_PROXY: http://host.docker.internal:7897
+      HTTP_PROXY: http://host.docker.internal:7897
+      NO_PROXY: localhost,127.0.0.1
+    ports:
+      - "8081:80"
+    volumes:
+      - tei-model-cache:/data
+
 volumes:
   pgvector-data:
+  tei-model-cache:

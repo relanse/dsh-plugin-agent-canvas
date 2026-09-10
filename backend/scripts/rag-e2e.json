@@ -1,0 +1,16 @@
+{
+  "userInput": "这个项目的循环防护是怎么做的",
+  "nodes": [
+    {
+      "id": "rag",
+      "type": "rag",
+      "data": {
+        "knowledgeBaseId": "kb_main",
+        "query": "{{__input__}}",
+        "topK": 4,
+        "rerankTopK": 2
+      }
+    }
+  ],
+  "edges": []
+}

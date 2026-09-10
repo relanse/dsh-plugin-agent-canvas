@@ -1,0 +1,15 @@
+Agent Canvas 是一个 DeepSeek Harness（DSH）插件，提供可视化 Agent 工作流编排能力：拖拽式 DAG 编辑器加 GenUI 流式执行面板。插件分宿主端与客户端两半，宿主端用 ctx.tools.register 注册 run_workflow 工具，客户端通过 slots 机制向 tool.call.toolview 贡献 React 面板。
+
+后端执行引擎使用 Go 实现，核心是 Kahn 分层拓扑排序：同一层内互不依赖的节点以 goroutine 并发执行，层与层之间串行推进。任一节点失败会取消整个同层任务，客户端断开时以 workflow_error 事件收场。
+
+工作流支持四类节点：LLM 节点调用 DeepSeek API 做流式对话与工具调用循环；工具节点确定性执行注册表中的内置工具；条件节点评估 len <op> N 表达式并按字符数分支；RAG 节点执行召回加重排的两阶段检索。
+
+内置工具目前有三个：calculator 支持四则运算且运算符两侧空格可有可无；string_transform 提供大小写转换、反转与词数统计；web_search 已接入 Tavily 真实搜索 API，返回带标题、摘要与来源链接的结果。
+
+SSE 事件协议共十一类事件：workflow_start、node_start、tool_call、tool_result、tool_error、llm_chunk、step_limit_warning、node_done、node_error、workflow_done、workflow_error。前端按事件类型动态挂载对应的 React 组件，同一 LLM 节点的流式分片会合并为一张连续输出卡片。
+
+循环防护是双层的：静态层面 Kahn 排序在执行前拒绝任何带环的图并返回 HTTP 400；动态层面 LLM 节点的 Agent Loop 有 maxSteps 上限，默认二十步，距上限还剩三步时发出 step_limit_warning 预警事件，超出上限则判定为工具链死循环并终止。
+
+RAG 检索架构：文档按空行分段落后约八百字符切块，经 OpenAI 兼容的嵌入端点转为向量写入 PostgreSQL 的 pgvector 扩展表，查询时用余弦相似度做 HNSW 索引召回 topK，再由 DeepSeek 做 listwise 重排取 rerankTopK，重排失败时自动回退召回序。
+
+国际化方案：中文词表是唯一事实来源，英文词表由 DeepSeek 自动翻译生成，插值占位符强制原样保留。pre-commit 钩子校验双语词表同步，缺失即拦截提交；工具调用 delta 分片按 Index 归并，乱序到达也能还原成完整调用。
