@@ -15,11 +15,13 @@ type SendFunc func(SSEEvent)
 // Execute runs the DAG defined by req, emitting SSE events via send as each
 // node starts, produces output, or fails. Execution stops at the first node
 // error; the caller is responsible for closing the SSE stream afterwards.
-func Execute(ctx context.Context, req DAGRequest, send SendFunc) error {
+// The first return value is the last successful node output — the sync
+// endpoint surfaces it as the workflow result.
+func Execute(ctx context.Context, req DAGRequest, send SendFunc) (string, error) {
 	order, err := TopologicalSort(req.Nodes, req.Edges)
 	if err != nil {
 		send(SSEEvent{Type: "workflow_error", Payload: map[string]string{"error": err.Error()}})
-		return err
+		return "", err
 	}
 
 	send(SSEEvent{
@@ -36,6 +38,7 @@ func Execute(ctx context.Context, req DAGRequest, send SendFunc) error {
 	}
 
 	wallStart := time.Now()
+	lastOutput := ""
 
 	for _, nodeID := range order {
 		node := findNode(req.Nodes, nodeID)
@@ -46,7 +49,7 @@ func Execute(ctx context.Context, req DAGRequest, send SendFunc) error {
 		select {
 		case <-ctx.Done():
 			send(SSEEvent{Type: "workflow_error", Payload: map[string]string{"error": "client disconnected"}})
-			return ctx.Err()
+			return "", ctx.Err()
 		default:
 		}
 
@@ -72,10 +75,14 @@ func Execute(ctx context.Context, req DAGRequest, send SendFunc) error {
 					"durationMs": durationMs,
 				},
 			})
-			return execErr
+			return "", execErr
 		}
 
+		// 输出同时挂到节点 ID 和 __last__：后者供条件节点取上游、
+		// LLM 节点做默认输入，也可在模板里显式引用 {{__last__}}
 		execCtx[nodeID] = output
+		execCtx["__last__"] = output
+		lastOutput = output
 		send(SSEEvent{
 			Type:   "node_done",
 			NodeID: nodeID,
@@ -93,7 +100,7 @@ func Execute(ctx context.Context, req DAGRequest, send SendFunc) error {
 			"nodeCount":       len(order),
 		},
 	})
-	return nil
+	return lastOutput, nil
 }
 
 func dispatchNode(ctx context.Context, node *DAGNode, execCtx ExecutionContext, send SendFunc) (string, error) {
@@ -103,7 +110,7 @@ func dispatchNode(ctx context.Context, node *DAGNode, execCtx ExecutionContext, 
 	case NodeTypeTool:
 		return executeToolNode(ctx, node, execCtx, send)
 	case NodeTypeCondition:
-		return executeConditionNode(node, execCtx)
+		return executeConditionNode(ctx, node, execCtx, send)
 	case NodeTypeRAG:
 		return executeRAGNode(ctx, node, execCtx, send)
 	default:
@@ -142,7 +149,7 @@ func getString(data NodeData, key, fallback string) string {
 	return fallback
 }
 
-func getFloat64(data NodeData, key, fallback float64) float64 {
+func getFloat64(data NodeData, key string, fallback float64) float64 {
 	switch v := data[key].(type) {
 	case float64:
 		return v
@@ -152,7 +159,7 @@ func getFloat64(data NodeData, key, fallback float64) float64 {
 	return fallback
 }
 
-func getInt(data NodeData, key, fallback int) int {
+func getInt(data NodeData, key string, fallback int) int {
 	switch v := data[key].(type) {
 	case float64:
 		return int(v)

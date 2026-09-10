@@ -24,6 +24,7 @@ func main() {
 	api := r.Group("/api")
 	{
 		api.POST("/execute", executor.HandleExecute)
+		api.POST("/execute-sync", executor.HandleExecuteSync)
 		api.POST("/validate", executor.HandleValidateDAG)
 		api.GET("/tools", tools.HandleListTools)
 		api.GET("/health", func(c *gin.Context) {

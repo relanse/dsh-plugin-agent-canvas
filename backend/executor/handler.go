@@ -44,7 +44,43 @@ func HandleExecute(c *gin.Context) {
 		c.Writer.(http.Flusher).Flush()
 	}
 
-	_ = Execute(ctx, req, send)
+	_, _ = Execute(ctx, req, send)
+}
+
+// HandleExecuteSync runs the same execution pipeline but collects events
+// in memory and answers with a single JSON document. This is the endpoint
+// the host-side run_workflow tool calls — the DSH tool protocol needs a
+// plain response, not a stream.
+func HandleExecuteSync(c *gin.Context) {
+	var req DAGRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(req.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "workflow has no nodes"})
+		return
+	}
+	if _, err := TopologicalSort(req.Nodes, req.Edges); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var eventCount int
+	send := func(SSEEvent) { eventCount++ }
+
+	output, err := Execute(c.Request.Context(), req, send)
+	if err != nil {
+		// node_error / workflow_error 已在事件流里；这里给出可读的失败响应
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "eventCount": eventCount})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"output":     output,
+		"nodeCount":  len(req.Nodes),
+		"eventCount": eventCount,
+	})
 }
 
 // HandleValidateDAG runs Kahn's algorithm on the submitted graph and returns
