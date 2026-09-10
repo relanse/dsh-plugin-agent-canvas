@@ -59,9 +59,45 @@ func buildToolSchemas() []openai.Tool {
 	return out
 }
 
+// toolCallMerger 按 Index 归并流式工具调用分片：同一个 ToolCall 的 name
+// 只在首个分片出现，arguments 逐片追加，乱序到达也按 index 还原成完整对象。
+type toolCallMerger struct {
+	merged  map[int]openai.ToolCall
+	indexes []int
+}
+
+func newToolCallMerger() *toolCallMerger {
+	return &toolCallMerger{merged: make(map[int]openai.ToolCall)}
+}
+
+func (m *toolCallMerger) add(idx int, tc openai.ToolCall) {
+	cur, seen := m.merged[idx]
+	if !seen {
+		m.indexes = append(m.indexes, idx)
+		cur = openai.ToolCall{Type: openai.ToolTypeFunction}
+	}
+	if tc.ID != "" {
+		cur.ID = tc.ID
+	}
+	if tc.Function.Name != "" {
+		cur.Function.Name = tc.Function.Name
+	}
+	cur.Function.Arguments += tc.Function.Arguments
+	m.merged[idx] = cur
+}
+
+// result 返回按 index 升序排列的完整工具调用列表。
+func (m *toolCallMerger) result() []openai.ToolCall {
+	sort.Ints(m.indexes)
+	out := make([]openai.ToolCall, 0, len(m.indexes))
+	for _, i := range m.indexes {
+		out = append(out, m.merged[i])
+	}
+	return out
+}
+
 // streamChat 流式调用一次 LLM：文本 delta 即时推 llm_chunk 事件；
-// 工具调用 delta 按 Index 归并 —— 同一个 ToolCall 的 name 只在首个分片出现，
-// arguments 逐片追加，乱序到达也按 index 还原成完整对象。
+// 工具调用 delta 交给 toolCallMerger 按 Index 归并。
 func streamChat(
 	ctx context.Context,
 	req openai.ChatCompletionRequest,
@@ -75,8 +111,7 @@ func streamChat(
 	defer stream.Close()
 
 	var content strings.Builder
-	merged := make(map[int]openai.ToolCall)
-	indexes := make([]int, 0)
+	merger := newToolCallMerger()
 
 	for {
 		resp, err := stream.Recv()
@@ -107,28 +142,11 @@ func streamChat(
 			if tc.Index != nil {
 				idx = *tc.Index
 			}
-			cur, seen := merged[idx]
-			if !seen {
-				indexes = append(indexes, idx)
-				cur = openai.ToolCall{Type: openai.ToolTypeFunction}
-			}
-			if tc.ID != "" {
-				cur.ID = tc.ID
-			}
-			if tc.Function.Name != "" {
-				cur.Function.Name = tc.Function.Name
-			}
-			cur.Function.Arguments += tc.Function.Arguments
-			merged[idx] = cur
+			merger.add(idx, tc)
 		}
 	}
 
-	sort.Ints(indexes)
-	toolCalls := make([]openai.ToolCall, 0, len(indexes))
-	for _, i := range indexes {
-		toolCalls = append(toolCalls, merged[i])
-	}
-	return content.String(), toolCalls, nil
+	return content.String(), merger.result(), nil
 }
 
 // executeLLMNode 是 Agent Loop 的核心：
