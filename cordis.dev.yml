@@ -1,0 +1,7 @@
+# 开发联调 overlay：不修改 harness 仓库任何文件，
+# 以 --patch 方式把本插件插入 Cordis 组合（Host 半由 Loader 加载，
+# Client 半经 package.json 的 dsh.client 声明被浏览器模块系统发现）。
+# 用法：pnpm dsh web --patch packages/plugins/agent-canvas/cordis.dev.yml
+- insert:
+    - id: agent-canvas
+      name: '@relanse/dsh-plugin-agent-canvas'

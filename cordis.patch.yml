@@ -1,0 +1,6 @@
+# DSH bundle 声明层：profile 通过 `dsh plugin add` 安装本包后，
+# 这一插入行让 Cordis Loader 加载 Host 半入口（package.json exports "." → lib/index.js）；
+# 浏览器半由 client 模块系统扫描 package.json 的 dsh.client 声明自动发现。
+- insert:
+    - id: agent-canvas
+      name: '@relanse/dsh-plugin-agent-canvas'
