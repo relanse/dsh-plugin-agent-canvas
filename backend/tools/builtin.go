@@ -2,9 +2,13 @@ package tools
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+// exprRe 容错解析 "N op N"：运算符两侧空格可有可无（LLM 常给 "12*12" 这种无空格形式）
+var exprRe = regexp.MustCompile(`^\s*(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)\s*$`)
 
 func init() {
 	Register(&ToolDef{
@@ -68,13 +72,16 @@ func handleCalculator(args map[string]interface{}) (string, error) {
 	if expr == "" {
 		return "", fmt.Errorf("expression is required")
 	}
-	var a, b float64
-	var op string
-	n, err := fmt.Sscanf(strings.TrimSpace(expr), "%f %s %f", &a, &op, &b)
-	if err != nil || n != 3 {
-		return "", fmt.Errorf("unsupported expression %q: expected 'N op N' (e.g. '3 + 4')", expr)
+	m := exprRe.FindStringSubmatch(strings.TrimSpace(expr))
+	if m == nil {
+		return "", fmt.Errorf("unsupported expression %q: expected 'N op N' (op: + - * /), e.g. '12*12' or '3 + 4'", expr)
 	}
-	switch op {
+	a, err1 := strconv.ParseFloat(m[1], 64)
+	b, err2 := strconv.ParseFloat(m[3], 64)
+	if err1 != nil || err2 != nil {
+		return "", fmt.Errorf("invalid operands in expression %q", expr)
+	}
+	switch m[2] {
 	case "+":
 		return strconv.FormatFloat(a+b, 'f', -1, 64), nil
 	case "-":
@@ -87,7 +94,7 @@ func handleCalculator(args map[string]interface{}) (string, error) {
 		}
 		return strconv.FormatFloat(a/b, 'f', -1, 64), nil
 	default:
-		return "", fmt.Errorf("unknown operator %q", op)
+		return "", fmt.Errorf("unknown operator %q", m[2])
 	}
 }
 
