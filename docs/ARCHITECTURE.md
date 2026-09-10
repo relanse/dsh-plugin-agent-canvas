@@ -1,5 +1,7 @@
 # Architecture Deep-Dive
 
+English | [简体中文](zh-CN/ARCHITECTURE.md)
+
 This document explains the design decisions behind the two most interesting parts of the system: the DAG execution engine and the GenUI streaming protocol.
 
 ---
@@ -53,7 +55,7 @@ Backend emits:                        Frontend renders:
 { type: "node_done", … }          →  NodeDoneBadge with duration
 ```
 
-The `EventRenderer` switch in `GenUIPanel/index.jsx` is the only place this mapping lives. Adding a new event type: emit it in Go, handle it in `EventRenderer`, write a component.
+The `EventRenderer` switch in `src/client/components/GenUIPanel/index.tsx` is the only place this mapping lives. Adding a new event type: emit it in Go, handle it in `EventRenderer`, write a component.
 
 ### Why fetch + ReadableStream instead of EventSource?
 

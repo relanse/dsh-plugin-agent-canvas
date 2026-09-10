@@ -1,5 +1,7 @@
 # Adding Custom Tools
 
+English | [简体中文](zh-CN/TOOLS.md)
+
 A tool is a Go function with a standard JSON Schema description. Register it once; the LLM can call it immediately, and it appears in the frontend node palette automatically.
 
 ---
